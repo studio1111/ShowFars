@@ -187,13 +187,23 @@ def main() -> int:
             if dry_run:
                 LOG.info("DRY RUN: %s validated; three files ready; no Telegram messages sent", identity)
             else:
-                message_ids = publisher.publish_movie(movie, caption, poster, outputs)
-                state.setdefault("published", {})[identity] = {
-                    "title": movie["title"], "message_ids": message_ids,
-                    "sha256": {q: hashlib.sha256(p.read_bytes()).hexdigest() for q, p in outputs.items()},
-                }
-                state.setdefault("failed", {}).pop(identity, None)
-                state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                record = state.setdefault("published", {}).setdefault(identity, {
+                    "title": movie["title"], "message_ids": {}, "sha256": {},
+                })
+                record["title"] = movie["title"]
+                record.setdefault("message_ids", {}).update(prior_ids)
+
+                def checkpoint(message_ids):
+                    record["message_ids"] = dict(message_ids)
+                    record["sha256"] = {q: hashlib.sha256(p.read_bytes()).hexdigest() for q, p in outputs.items()}
+                    state.setdefault("failed", {}).pop(identity, None)
+                    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+                message_ids = publisher.publish_movie(
+                    movie, caption, poster, outputs,
+                    existing_ids=record["message_ids"], checkpoint=checkpoint,
+                )
+                checkpoint(message_ids)
                 LOG.info("Published %s with message IDs %s", identity, message_ids)
         except Exception as exc:
             failures += 1
