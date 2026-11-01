@@ -170,7 +170,9 @@ def main() -> int:
             failures += 1
             continue
         identity = str(movie["id"])
-        if identity in state.get("published", {}):
+        prior = state.get("published", {}).get(identity, {})
+        prior_ids = prior.get("message_ids", {}) if isinstance(prior, dict) else {}
+        if all(key in prior_ids for key in ("lead", "1080p", "720p", "480p")):
             LOG.info("Already published; skip %s", identity)
             continue
         processed += 1
