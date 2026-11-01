@@ -9,7 +9,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 
@@ -49,8 +49,27 @@ def download_source(movie: dict, config: dict, target: Path) -> None:
     if not valid_https(url, config.get("allowed_download_hosts", [])):
         raise ValueError("source URL is not HTTPS on an explicitly allowlisted host")
     max_bytes = int(config.get("max_source_size_mb", 4096)) * 1024 * 1024
-    with requests.get(url, stream=True, timeout=int(config.get("download_timeout_seconds", 60)),
-                      headers={"User-Agent": "ShowFars/1.0"}) as response:
+    allowed_hosts = config.get("allowed_download_hosts", [])
+    response = None
+    for _ in range(6):
+        if not valid_https(url, allowed_hosts):
+            raise ValueError("redirect target is not HTTPS on an explicitly allowlisted host")
+        response = requests.get(
+            url, stream=True, allow_redirects=False,
+            timeout=int(config.get("download_timeout_seconds", 60)),
+            headers={"User-Agent": "ShowFars/1.0"},
+        )
+        if response.status_code in (301, 302, 303, 307, 308):
+            location = response.headers.get("Location")
+            response.close()
+            if not location:
+                raise ValueError("source redirect did not include a Location header")
+            url = urljoin(url, location)
+            continue
+        break
+    else:
+        raise ValueError("source exceeded the maximum number of redirects")
+    with response:
         response.raise_for_status()
         content_type = response.headers.get("Content-Type", "").lower()
         if content_type.startswith(("text/html", "application/json")):
