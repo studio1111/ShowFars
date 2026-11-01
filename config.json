@@ -1,0 +1,13 @@
+{
+  "allowed_download_hosts": ["media.example.org"],
+  "allowed_poster_hosts": ["media.example.org"],
+  "max_source_size_mb": 4096,
+  "max_output_size_mb": 49,
+  "download_timeout_seconds": 60,
+  "http_retries": 3,
+  "ffmpeg_preset": "medium",
+  "video_crf": 27,
+  "audio_bitrate": "128k",
+  "dry_run_default": true,
+  "max_movies_per_run": 1
+}
