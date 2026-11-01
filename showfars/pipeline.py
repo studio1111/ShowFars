@@ -96,7 +96,8 @@ def encode_three(source: Path, work: Path, config: dict) -> dict[str, Path]:
     outputs = {}
     for quality, width in (("1080p", 1920), ("720p", 1280), ("480p", 854)):
         dest = work / f"{quality}.mp4"
-        vf = f"scale='min({width},iw)':-2:force_original_aspect_ratio=decrease"
+        height = {1920: 1080, 1280: 720, 854: 480}[width]
+        vf = f"scale='min({width},iw)':'min({height},ih)':force_original_aspect_ratio=decrease"
         run_cmd([
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(source),
             "-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn",
@@ -162,7 +163,9 @@ def main() -> int:
     publisher = TelegramPublisher(token, chat_id) if not dry_run else None
     max_movies = max(1, int(config.get("max_movies_per_run", 1)))
     processed = failures = 0
-    for movie in movies:
+    start_index = int(state.get("cursor", 0)) % max(1, len(movies))
+    ordered_movies = movies[start_index:] + movies[:start_index] if movies else []
+    for offset, movie in enumerate(ordered_movies):
         if processed >= max_movies:
             break
         if not isinstance(movie, dict) or not movie.get("id") or not movie.get("title"):
@@ -176,6 +179,7 @@ def main() -> int:
             LOG.info("Already published; skip %s", identity)
             continue
         processed += 1
+        state["cursor"] = (start_index + offset + 1) % max(1, len(movies))
         work = ROOT / "work" / hashlib.sha256(identity.encode()).hexdigest()[:16]
         work.mkdir(parents=True, exist_ok=True)
         try:
