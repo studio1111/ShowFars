@@ -25,18 +25,26 @@ class TelegramPublisher:
         return payload["result"]
 
     def publish_movie(self, movie: dict, caption: str, poster: bytes | None,
-                      outputs: dict[str, Path]) -> dict:
-        if poster:
-            result = self._post("sendPhoto", {
-                "chat_id": self.chat_id, "caption": caption, "parse_mode": "HTML",
-            }, {"photo": ("poster.jpg", poster, "image/jpeg")})
-        else:
-            result = self._post("sendMessage", {
-                "chat_id": self.chat_id, "text": caption, "parse_mode": "HTML",
-            })
-        lead_id = result["message_id"]
-        ids = {"lead": lead_id}
+                      outputs: dict[str, Path], existing_ids: dict | None = None,
+                      checkpoint=None) -> dict:
+        ids = dict(existing_ids or {})
+        if "lead" not in ids:
+            if poster:
+                result = self._post("sendPhoto", {
+                    "chat_id": self.chat_id, "caption": caption, "parse_mode": "HTML",
+                }, {"photo": ("poster.jpg", poster, "image/jpeg")})
+            else:
+                result = self._post("sendMessage", {
+                    "chat_id": self.chat_id, "text": caption, "parse_mode": "HTML",
+                })
+            ids["lead"] = result["message_id"]
+            if checkpoint:
+                checkpoint(ids)
+        lead_id = ids["lead"]
         for quality in ("1080p", "720p", "480p"):
+            if quality in ids:
+                LOG.info("Already recorded %s message for this movie; resume after it", quality)
+                continue
             path = outputs[quality]
             LOG.info("Uploading %s (%d bytes)", quality, path.stat().st_size)
             with path.open("rb") as handle:
@@ -47,5 +55,7 @@ class TelegramPublisher:
                     "supports_streaming": "true",
                 }, {"video": (path.name, handle, "video/mp4")})
             ids[quality] = result["message_id"]
+            if checkpoint:
+                checkpoint(ids)
             time.sleep(1)
         return ids
