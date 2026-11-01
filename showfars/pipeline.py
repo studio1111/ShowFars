@@ -142,7 +142,7 @@ def poster_bytes(movie: dict, config: dict) -> bytes | None:
     if not url or not valid_https(url, config.get("allowed_poster_hosts", [])):
         return None
     try:
-        response = requests.get(url, timeout=30, headers={"User-Agent": "ShowFars/1.0"})
+        response = requests.get(url, timeout=30, allow_redirects=False, headers={"User-Agent": "ShowFars/1.0"})
         response.raise_for_status()
         if not response.headers.get("Content-Type", "").lower().startswith("image/"):
             return None
