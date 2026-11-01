@@ -1,0 +1,25 @@
+name: Retain latest 30 workflow runs
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete older completed workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh run list --repo "$GH_REPO" --limit 1000 --json databaseId,status,createdAt             | jq -r '[.[] | select(.status == "completed")] | sort_by(.createdAt) | reverse | .[30:][] | .databaseId'             | while read -r run_id; do
+                [ -n "$run_id" ] || continue
+                gh run delete "$run_id" --repo "$GH_REPO" || true
+              done
